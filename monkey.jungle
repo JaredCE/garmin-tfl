@@ -1,0 +1,10 @@
+project.manifest = manifest.xml
+
+# Source files
+base.sourcePath = source
+base.resourcePath = resources
+
+# Fenix 6 specific target (for sideloading during dev)
+fenix6.sourcePath = $(base.sourcePath)
+fenix6.resourcePath = $(base.resourcePath)
+# fenix6.target = fenix6

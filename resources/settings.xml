@@ -1,0 +1,11 @@
+<settings>
+  <setting propertyKey="@Properties.tflAppKey"
+           title="@Strings.SettingTflKeyTitle">
+    <settingConfig type="alphaNumeric"/>
+  </setting>
+
+  <setting propertyKey="@Properties.transitProvider"
+           title="@Strings.SettingProviderTitle">
+    <settingConfig type="alphaNumeric"/>
+  </setting>
+</settings>
