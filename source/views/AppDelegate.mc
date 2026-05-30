@@ -71,6 +71,18 @@ module BusNearMe {
             return 0;
         }
 
+        function onMenu() as Boolean {
+            var ctrl = getApp().controller;
+
+            // Only available on the stops screen
+            if (ctrl.state == AppState.STOPS) {
+                ctrl.changeRadius();
+                return true;
+            }
+
+            return false;
+        }
+
     }
 
 }
