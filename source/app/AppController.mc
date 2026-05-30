@@ -23,6 +23,7 @@ module BusNearMe {
         // Data
         var stops       as Array or Null;
         var arrivals    as Array or Null;
+        var arrivalsRaw as Array or Null;  // pre-dedup, for ETA label scanning
         var scrollIndex as Number = 0;
         var selectedStop as Stop or Null;
 
@@ -133,8 +134,9 @@ module BusNearMe {
                 return;
             }
 
-            arrivals = data;
-            state = AppState.ARRIVALS;
+            arrivalsRaw = data;
+            arrivals    = TfLProvider.deduplicateArrivals(data);
+            state       = AppState.ARRIVALS;
             requestUiUpdate();
         }
 
@@ -149,6 +151,7 @@ module BusNearMe {
         // Go back from arrivals to stop list
         function backToStops() as Void {
             arrivals = null;
+            arrivalsRaw = null;
             scrollIndex = 0;
             state = AppState.STOPS;
             requestUiUpdate();
@@ -166,6 +169,7 @@ module BusNearMe {
         function retry() as Void {
             stops        = null;
             arrivals     = null;
+            arrivalsRaw  = null;
             selectedStop = null;
             errorMsg     = null;
             scrollIndex  = 0;

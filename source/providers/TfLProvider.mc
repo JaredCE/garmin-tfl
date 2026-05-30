@@ -250,9 +250,7 @@ module BusNearMe {
             return stops;
         }
 
-        function parseArrivals(data as Array) as Array<Arrival> or Null {
-            // TfL arrivals is a flat array:
-            // [ { "lineName", "destinationName", "timeToStation" }, ... ]
+        function parseArrivals(data as Array) as Array or Null {
             var arrivals = [] as Array<Arrival>;
 
             for (var i = 0; i < data.size() && i < 20; i++) {
@@ -272,18 +270,18 @@ module BusNearMe {
                 arrivals.add(arrival);
             }
 
-            // Sort by ETA ascending — simple bubble sort (no lambdas in Monkey C)
+            // Sort by ETA ascending
             for (var i = 0; i < arrivals.size() - 1; i++) {
                 for (var j = 0; j < arrivals.size() - 1 - i; j++) {
                     if ((arrivals[j] as Arrival).etaSeconds > (arrivals[j + 1] as Arrival).etaSeconds) {
-                        var tmp = arrivals[j];
+                        var tmp    = arrivals[j];
                         arrivals[j] = arrivals[j + 1];
                         arrivals[j + 1] = tmp;
                     }
                 }
             }
 
-            arrivals = deduplicateArrivals(arrivals);
+            // Return raw sorted list — dedup happens separately in the controller
             return arrivals;
         }
 
