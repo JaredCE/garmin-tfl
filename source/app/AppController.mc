@@ -1,5 +1,6 @@
 import Toybox.Lang;
 import Toybox.Position;
+import Toybox.Timer;
 import Toybox.WatchUi;
 
 module BusNearMe {
@@ -31,8 +32,15 @@ module BusNearMe {
         // We store as an Object so we can call methods on it generically
         var provider as TransitProviderBase or Null;
 
+        var _gpsTimer    as Timer.Timer or Null;
+
+        // How long to wait for a GPS fix before giving up (30 seconds)
+        const GPS_TIMEOUT_MS = 30000;
+
         // GPS search radius in metres
         const RADIUS = 100;
+
+
 
         function initialize() {
             state        = AppState.GPS;
@@ -41,6 +49,7 @@ module BusNearMe {
             arrivals     = null;
             selectedStop = null;
             provider     = null;
+            _gpsTimer    = null;
             scrollIndex  = 0;
             resolveProvider();
         }
@@ -61,6 +70,11 @@ module BusNearMe {
 
         function startGps() as Void {
             state = AppState.GPS;
+
+            // Start timeout timer — if no fix in GPS_TIMEOUT_MS, give up
+            _gpsTimer = new Timer.Timer();
+            _gpsTimer.start(method(:onGpsTimeout), GPS_TIMEOUT_MS, false);
+
             Position.enableLocationEvents(
                 Position.LOCATION_CONTINUOUS,
                 method(:onPosition)
@@ -68,21 +82,37 @@ module BusNearMe {
         }
 
         function stopGps() as Void {
+            cancelGpsTimer();
             Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
+        }
+
+        function cancelGpsTimer() as Void {
+            if (_gpsTimer != null) {
+                (_gpsTimer as Timer.Timer).stop();
+                _gpsTimer = null;
+            }
+        }
+
+        // Called by the timer if GPS takes too long
+        function onGpsTimeout() as Void {
+            _gpsTimer = null;
+            stopGps();
+            setError(WatchUi.loadResource(Rez.Strings.ErrorGps) as String);
         }
 
         // Called by Garmin positioning system
         function onPosition(info as Position.Info) as Void {
-            // Wait until we have an accurate fix
             if (info.accuracy < Position.QUALITY_USABLE) {
                 return;
             }
 
-            stopGps(); // single fix is enough
+            // Got a fix — cancel the timeout and stop GPS
+            cancelGpsTimer();
+            stopGps();
 
-            var coords = info.position.toDegrees(); // [lat, lon]
-            var lat = coords[0].toFloat();
-            var lon = coords[1].toFloat();
+            var coords = info.position.toDegrees();
+            var lat    = coords[0].toFloat();
+            var lon    = coords[1].toFloat();
 
             fetchStops(lat, lon);
         }
