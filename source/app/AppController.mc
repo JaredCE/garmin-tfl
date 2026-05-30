@@ -37,8 +37,23 @@ module BusNearMe {
         // How long to wait for a GPS fix before giving up (30 seconds)
         const GPS_TIMEOUT_MS = 30000;
 
-        // GPS search radius in metres
-        const RADIUS = 100;
+        var radius as Number = 100;
+        var lastLat as Float = 0.0f;
+        var lastLon as Float = 0.0f;
+
+        // Cycles through sensible radius options on long-press MENU
+        const RADIUS_OPTIONS = [100, 200, 350, 500] as Array<Number>;
+
+        function cycleRadius() as Void {
+            var next = 0;
+            for (var i = 0; i < RADIUS_OPTIONS.size(); i++) {
+                if ((RADIUS_OPTIONS[i] as Number) == radius) {
+                    next = (i + 1) % RADIUS_OPTIONS.size();
+                    break;
+                }
+            }
+            radius = RADIUS_OPTIONS[next] as Number;
+        }
 
 
 
@@ -106,15 +121,20 @@ module BusNearMe {
                 return;
             }
 
-            // Got a fix — cancel the timeout and stop GPS
             cancelGpsTimer();
             stopGps();
 
             var coords = info.position.toDegrees();
-            var lat    = coords[0].toFloat();
-            var lon    = coords[1].toFloat();
+            lastLat    = coords[0].toFloat();
+            lastLon    = coords[1].toFloat();
 
-            fetchStops(lat, lon);
+            fetchStops(lastLat, lastLon);
+        }
+
+        function changeRadius() as Void {
+            if (state != AppState.STOPS) { return; }
+            cycleRadius();
+            fetchStops(lastLat, lastLon);
         }
 
         // --- Stops ---
@@ -124,7 +144,7 @@ module BusNearMe {
             requestUiUpdate();
 
             if (provider != null) {
-                (provider as TransitProviderBase).fetchNearbyStops(lat, lon, RADIUS, method(:onStopsResult));
+                (provider as TransitProviderBase).fetchNearbyStops(lat, lon, radius, method(:onStopsResult));
             }
         }
 
