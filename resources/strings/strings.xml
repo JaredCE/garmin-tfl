@@ -1,0 +1,17 @@
+<strings>
+  <string id="AppName">Bus Near Me</string>
+  <string id="Loading">Acquiring GPS...</string>
+  <string id="FetchingStops">Finding stops...</string>
+  <string id="FetchingArrivals">Loading arrivals...</string>
+  <string id="NoStops">No stops found nearby</string>
+  <string id="NoArrivals">No arrivals found</string>
+  <string id="ErrorGps">GPS unavailable</string>
+  <string id="ErrorNetwork">Network error</string>
+  <string id="ErrorNoKey">No API key set</string>
+  <string id="Due">Due</string>
+  <string id="Min">min</string>
+  <string id="Back">Back</string>
+  <string id="Refresh">Refresh</string>
+  <string id="SettingTflKeyTitle">TfL API Key</string>
+  <string id="SettingProviderTitle">Provider</string>
+</strings>

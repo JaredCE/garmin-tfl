@@ -1,0 +1,4 @@
+<properties>
+  <property id="tflAppKey" type="String"></property>
+  <property id="transitProvider" type="String">tfl</property>
+</properties>
