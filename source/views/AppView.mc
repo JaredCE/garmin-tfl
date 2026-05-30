@@ -1,13 +1,11 @@
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.WatchUi;
+import Toybox.System;
 
 module BusNearMe {
 
     class AppView extends WatchUi.View {
-
-        // Scroll index for stop list and arrivals list
-        var scrollIndex as Number = 0;
 
         function initialize() {
             View.initialize();
@@ -17,9 +15,9 @@ module BusNearMe {
             dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
             dc.clear();
 
-            var controller = getApp().controller;
+            var ctrl = getApp().controller;
 
-            switch (controller.state) {
+            switch (ctrl.state) {
                 case AppState.GPS:
                     drawCentered(dc, WatchUi.loadResource(Rez.Strings.Loading) as String);
                     break;
@@ -30,24 +28,50 @@ module BusNearMe {
                     drawCentered(dc, WatchUi.loadResource(Rez.Strings.FetchingArrivals) as String);
                     break;
                 case AppState.STOPS:
-                    drawStops(dc, controller.stops as Array, controller.scrollIndex);
+                    drawStops(dc, ctrl.stops as Array, ctrl.scrollIndex, ctrl.radius);
                     break;
                 case AppState.ARRIVALS:
                     drawArrivals(
                         dc,
-                        controller.arrivals as Array,
-                        controller.arrivalsRaw as Array,
-                        controller.selectedStop as Stop,
-                        controller.scrollIndex
+                        ctrl.arrivals     as Array,
+                        ctrl.arrivalsRaw  as Array,
+                        ctrl.selectedStop as Stop,
+                        ctrl.scrollIndex
                     );
                     break;
                 case AppState.ERROR:
-                    drawError(dc, controller.errorMsg as String);
+                    drawError(dc, ctrl.errorMsg as String);
                     break;
             }
         }
 
-        // --- Loading / error screens ---
+        // ---------------------------------------------------------------
+        // Screen geometry helpers
+        // ---------------------------------------------------------------
+
+        // Returns true if the device has a round screen
+        function isRound() as Boolean {
+            var shape = System.getDeviceSettings().screenShape;
+            return (shape == System.SCREEN_SHAPE_ROUND ||
+                    shape == System.SCREEN_SHAPE_SEMI_ROUND);
+        }
+
+        // Proportional value — n% of dimension d
+        function pct(d as Number, n as Float) as Number {
+            return (d * n).toNumber();
+        }
+
+        // Truncate string to maxChars, appending ".." if trimmed
+        function trunc(str as String, maxChars as Number) as String {
+            if (str.length() > maxChars) {
+                return str.substring(0, maxChars - 2) + "..";
+            }
+            return str;
+        }
+
+        // ---------------------------------------------------------------
+        // Loading / error
+        // ---------------------------------------------------------------
 
         function drawCentered(dc as Graphics.Dc, msg as String) as Void {
             var w = dc.getWidth();
@@ -64,7 +88,6 @@ module BusNearMe {
         function drawError(dc as Graphics.Dc, msg as String) as Void {
             var w = dc.getWidth();
             var h = dc.getHeight();
-
             dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 w / 2, (h / 2) - 20,
@@ -72,7 +95,6 @@ module BusNearMe {
                 msg,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
-
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 w / 2, (h / 2) + 20,
@@ -82,118 +104,128 @@ module BusNearMe {
             );
         }
 
-        // --- Stop list ---
+        // ---------------------------------------------------------------
+        // Stop list
+        // ---------------------------------------------------------------
 
-        function drawStops(dc as Graphics.Dc, stops as Array, scrollIndex as Number) as Void {
-            var w  = dc.getWidth();   // 260
-            var h  = dc.getHeight();  // 260
-            var cx = w / 2;           // 130
+        function drawStops(
+            dc          as Graphics.Dc,
+            stops       as Array,
+            scrollIndex as Number,
+            radius      as Number
+        ) as Void {
+            var w  = dc.getWidth();
+            var h  = dc.getHeight();
+            var cx = w / 2;
+            var round = isRound();
 
-            // Safe zone on a 260px circle:
-            // Top safe y  ~ 40px  (narrow band, keep text short and centred tightly)
-            // Bottom safe ~ 220px
-            // At y=40, usable width ~ 200px
+            // Font heights — row sizing derived from actual font metrics
+            var mainH = dc.getFontHeight(Graphics.FONT_SMALL);
+            var subH  = dc.getFontHeight(Graphics.FONT_XTINY);
+            var pad   = pct(h, 0.03f);
+            if (pad < 3) { pad = 3; }
 
-            var rowHeight   = 46;
-            var visibleRows = 3;    // reduced from 4 — gives more vertical breathing room
-            var listTop     = 52;   // start rows well inside the safe zone
+            // rowHeight = top pad + main text + pad + sub text + bottom pad
+            var rowH = pad + mainH + pad + subH + pad;
 
-            // Header — centred, short, sits in the narrow top band
+            // Header zone — proportional to screen height
+            var headerY  = pct(h, 0.08f);
+            var dividerY = pct(h, 0.14f);
+            var dividerX = round ? pct(w, 0.23f) : pct(w, 0.01f);
+            var listTop  = dividerY + pad;
+
+            // Bottom zone
+            var hintY    = round ? pct(h, 0.88f) : h - pct(h, 0.03f);
+            var dotsY    = hintY - subH - pad;
+
+            // How many rows fit
+            var listH      = dotsY - listTop - pad;
+            var visibleRows = listH / rowH;
+            if (visibleRows < 1) { visibleRows = 1; }
+
+            // Header
             dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                cx, 36,
+                cx, headerY,
                 Graphics.FONT_XTINY,
-                "NEARBY STOPS",
+                "NEARBY STOPS · " + radius + "m",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
-
-            // Thin divider under header
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawLine(60, 46, w - 60, 46);
+            dc.drawLine(dividerX, dividerY, w - dividerX, dividerY);
 
             // Clamp scroll
             var maxScroll = stops.size() - visibleRows;
             if (maxScroll < 0) { maxScroll = 0; }
-            var clampedIndex = scrollIndex;
-            if (clampedIndex > maxScroll) { clampedIndex = maxScroll; }
-            if (clampedIndex < 0)         { clampedIndex = 0; }
+            var idx = scrollIndex;
+            if (idx > maxScroll) { idx = maxScroll; }
+            if (idx < 0)         { idx = 0; }
 
-            for (var i = 0; i < visibleRows && (i + clampedIndex) < stops.size(); i++) {
-                var stop       = stops[i + clampedIndex] as Stop;
-                var y          = listTop + (i * rowHeight);
-                var isSelected = (i + clampedIndex) == scrollIndex;
-                var isLast     = (i + clampedIndex) == stops.size() - 1;
+            // Rows
+            var marginX = round ? pct(w, 0.08f) : pct(w, 0.01f);
+            var maxChars = round ? 20 : 28;
 
-                drawStopRow(dc, stop, y, w, isSelected, isLast);
+            for (var i = 0; i < visibleRows && (i + idx) < stops.size(); i++) {
+                var stop       = stops[i + idx] as Stop;
+                var y          = listTop + (i * rowH);
+                var isSelected = (i + idx) == scrollIndex;
+                var isLast     = (i + idx) == stops.size() - 1;
+
+                // Highlight
+                if (isSelected) {
+                    dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_BLUE);
+                    dc.fillRectangle(marginX, y, w - (marginX * 2), rowH);
+                }
+
+                // Stop name — top-aligned so descenders don't overlap sub-label
+                var nameY = y + pad;
+                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(
+                    cx, nameY,
+                    Graphics.FONT_SMALL,
+                    trunc(stop.name, maxChars),
+                    Graphics.TEXT_JUSTIFY_CENTER
+                );
+
+                // Sub-label — placed below full font height
+                var subLabel = stop.distance + "m";
+                if (stop.indicator.length() > 0) {
+                    subLabel = stop.indicator + " · " + stop.distance + "m";
+                }
+                var subY = nameY + mainH + pad;
+                dc.setColor(isSelected ? Graphics.COLOR_WHITE : Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(
+                    cx, subY,
+                    Graphics.FONT_XTINY,
+                    subLabel,
+                    Graphics.TEXT_JUSTIFY_CENTER
+                );
+
+                // Divider at exact bottom of row
+                if (!isLast && !isSelected) {
+                    dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+                    dc.drawLine(marginX, y + rowH, w - marginX, y + rowH);
+                }
             }
 
-            // Scroll hint at bottom — sits at safe y~215
+            // Scroll dots
             if (stops.size() > visibleRows) {
-                drawScrollDots(dc, stops.size(), visibleRows, clampedIndex, w, 224);
+                drawScrollDots(dc, stops.size(), visibleRows, idx, w, dotsY);
             }
 
-            // Press START hint
+            // Hint
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                cx, 238,
+                cx, hintY,
                 Graphics.FONT_XTINY,
-                "START to select",
+                "START=select  HOLD UP=radius",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
         }
 
-
-        function drawStopRow(
-            dc         as Graphics.Dc,
-            stop       as Stop,
-            y          as Number,
-            w          as Number,
-            isSelected as Boolean,
-            isLast     as Boolean
-        ) as Void {
-            var cx      = w / 2;
-            var marginX = 22;
-
-            if (isSelected) {
-                dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_BLUE);
-                dc.fillRectangle(marginX, y - 2, w - (marginX * 2), 42);
-            }
-
-            // Stop name — truncate to fit
-            var name = stop.name;
-            if (name.length() > 20) {
-                name = name.substring(0, 18) + "..";
-            }
-
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                cx, y + 8,
-                Graphics.FONT_SMALL,
-                name,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            // Sub-label: "Stop C · 67m" or just "67m" if no indicator
-            var subLabel = stop.distance + "m";
-            if (stop.indicator.length() > 0) {
-                subLabel = stop.indicator + " · " + stop.distance + "m";
-            }
-
-            dc.setColor(isSelected ? Graphics.COLOR_WHITE : Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                cx, y + 26,
-                Graphics.FONT_XTINY,
-                subLabel,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            if (!isLast && !isSelected) {
-                dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-                dc.drawLine(50, y + 42, w - 50, y + 42);
-            }
-        }
-
-        // --- Arrivals list ---
+        // ---------------------------------------------------------------
+        // Arrivals
+        // ---------------------------------------------------------------
 
         function drawArrivals(
             dc          as Graphics.Dc,
@@ -205,27 +237,37 @@ module BusNearMe {
             var w  = dc.getWidth();
             var h  = dc.getHeight();
             var cx = w / 2;
+            var round = isRound();
 
-            var rowHeight   = 48;
-            var visibleRows = 3;
-            var listTop     = 52;
+            var mainH = dc.getFontHeight(Graphics.FONT_SMALL);
+            var subH  = dc.getFontHeight(Graphics.FONT_XTINY);
+            var pad   = pct(h, 0.03f);
+            if (pad < 3) { pad = 3; }
 
-            // Stop name header
-            var headerName = stop.name;
-            if (headerName.length() > 18) {
-                headerName = headerName.substring(0, 16) + "..";
-            }
+            var rowH = pad + mainH + pad + subH + pad;
 
+            var headerY  = pct(h, 0.08f);
+            var dividerY = pct(h, 0.14f);
+            var dividerX = round ? pct(w, 0.23f) : pct(w, 0.01f);
+            var listTop  = dividerY + pad;
+            var hintY    = round ? pct(h, 0.88f) : h - pct(h, 0.03f);
+            var dotsY    = hintY - subH - pad;
+
+            var listH       = dotsY - listTop - pad;
+            var visibleRows = listH / rowH;
+            if (visibleRows < 1) { visibleRows = 1; }
+
+            // Header
+            var maxHeaderChars = round ? 18 : 30;
             dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                cx, 36,
+                cx, headerY,
                 Graphics.FONT_XTINY,
-                headerName,
+                trunc(stop.name, maxHeaderChars),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
-
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawLine(60, 46, w - 60, 46);
+            dc.drawLine(dividerX, dividerY, w - dividerX, dividerY);
 
             if (arrivals.size() == 0) {
                 drawCentered(dc, WatchUi.loadResource(Rez.Strings.NoArrivals) as String);
@@ -234,109 +276,99 @@ module BusNearMe {
 
             var maxScroll = arrivals.size() - visibleRows;
             if (maxScroll < 0) { maxScroll = 0; }
-            var clampedIndex = scrollIndex;
-            if (clampedIndex > maxScroll) { clampedIndex = maxScroll; }
-            if (clampedIndex < 0)         { clampedIndex = 0; }
+            var idx = scrollIndex;
+            if (idx > maxScroll) { idx = maxScroll; }
+            if (idx < 0)         { idx = 0; }
 
-            for (var i = 0; i < visibleRows && (i + clampedIndex) < arrivals.size(); i++) {
-                var arrival = arrivals[i + clampedIndex] as Arrival;
-                var y       = listTop + (i * rowHeight);
-                var isLast  = (i + clampedIndex) == arrivals.size() - 1;
+            var marginX    = round ? pct(w, 0.08f) : pct(w, 0.01f);
+            var maxDestChars = round ? 13 : 20;
 
-                drawArrivalRow(dc, arrival, arrivalsRaw, y, w, isLast);
+            // lineX — where the line number starts
+            // On round: offset left from centre to keep content in safe zone
+            // On rect:  from left margin
+            var lineX = round ? cx - pct(w, 0.29f) : marginX + 4;
+
+            for (var i = 0; i < visibleRows && (i + idx) < arrivals.size(); i++) {
+                var arrival = arrivals[i + idx] as Arrival;
+                var y       = listTop + (i * rowH);
+                var isLast  = (i + idx) == arrivals.size() - 1;
+
+                // Line number — top-aligned
+                var lineY = y + pad;
+                dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(
+                    lineX, lineY,
+                    Graphics.FONT_SMALL,
+                    arrival.line,
+                    Graphics.TEXT_JUSTIFY_LEFT
+                );
+
+                // Destination — measure line number width so they never overlap
+                var lineDims = dc.getTextDimensions(arrival.line, Graphics.FONT_SMALL);
+                var lineNumW = (lineDims[0] as Number) + 8;
+                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(
+                    lineX + lineNumW, lineY,
+                    Graphics.FONT_SMALL,
+                    trunc(arrival.destination, maxDestChars),
+                    Graphics.TEXT_JUSTIFY_LEFT
+                );
+
+                // ETA — placed below full font height, never overlaps line above
+                var etaY = lineY + mainH + pad;
+                dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(
+                    cx, etaY,
+                    Graphics.FONT_XTINY,
+                    buildEtaLabel(arrivalsRaw, arrival),
+                    Graphics.TEXT_JUSTIFY_CENTER
+                );
+
+                // Divider at exact bottom of row
+                if (!isLast) {
+                    dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+                    dc.drawLine(marginX, y + rowH, w - marginX, y + rowH);
+                }
             }
 
             if (arrivals.size() > visibleRows) {
-                drawScrollDots(dc, arrivals.size(), visibleRows, clampedIndex, w, 224);
+                drawScrollDots(dc, arrivals.size(), visibleRows, idx, w, dotsY);
             }
 
-            // Refresh hint
             dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
-                cx, 238,
+                cx, hintY,
                 Graphics.FONT_XTINY,
                 "START to refresh",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
         }
 
-        function drawArrivalRow(
-            dc          as Graphics.Dc,
-            arrival     as Arrival,
-            arrivalsRaw as Array,
-            y           as Number,
-            w           as Number,
-            isLast      as Boolean
-        ) as Void {
-            var cx = w / 2;
+        // ---------------------------------------------------------------
+        // ETA label builder
+        // ---------------------------------------------------------------
 
-            // Line number — left-ish, bold feel using FONT_MEDIUM
-            // Anchor at cx-80 so line+destination read left to right naturally
-            var lineX = cx - 76;
-            dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                lineX, y + 8,
-                Graphics.FONT_SMALL,
-                arrival.line,
-                Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            // Destination — truncated, follows line number
-            var dest = arrival.destination;
-            if (dest.length() > 14) {
-                dest = dest.substring(0, 12) + "..";
-            }
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                lineX + 46, y + 8,
-                Graphics.FONT_SMALL,
-                dest,
-                Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            // ETA row — green, centred under the line above
-            var etaLabel = buildEtaLabel(arrivalsRaw, arrival);
-            dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(
-                cx, y + 28,
-                Graphics.FONT_XTINY,
-                etaLabel,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-
-            if (!isLast) {
-                dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-                dc.drawLine(50, y + 44, w - 50, y + 44);
-            }
-        }
-
-        // Collects ETAs for same line+destination and builds "Due · 8 · 16 min"
-        // We only show the first matching arrival's row, so scan ahead for same service
         function buildEtaLabel(arrivals as Array, current as Arrival) as String {
             var label = "";
             var count = 0;
-            var lastMinutes = -1;
 
             for (var i = 0; i < arrivals.size() && count < 3; i++) {
                 var a = arrivals[i] as Arrival;
-                if (!a.line.equals(current.line) || !a.destination.equals(current.destination)) {
+                if (!a.line.equals(current.line) ||
+                    !a.destination.equals(current.destination)) {
                     continue;
                 }
-
-                if (count > 0) {
-                    label = label + " · ";
-                }
-
+                if (count > 0) { label = label + " · "; }
                 label = label + a.etaLabel();
                 count++;
             }
 
-            // Append "min" suffix once at the end if any non-Due values
-            // etaLabel() already includes "min" per value so we leave it as-is
             return label;
         }
 
-        // --- Scroll indicator dots ---
+        // ---------------------------------------------------------------
+        // Scroll dots
+        // ---------------------------------------------------------------
 
         function drawScrollDots(
             dc          as Graphics.Dc,
@@ -344,15 +376,15 @@ module BusNearMe {
             visibleRows as Number,
             current     as Number,
             w           as Number,
-            dotY        as Number    // explicit y — caller decides placement
+            dotY        as Number
         ) as Void {
             var totalDots = totalItems - visibleRows + 1;
             if (totalDots <= 1) { return; }
 
-            var dotSize  = 4;
-            var dotGap   = 8;
-            var totalW   = (totalDots * dotSize) + ((totalDots - 1) * dotGap);
-            var startX   = (w - totalW) / 2;
+            var dotSize = 4;
+            var dotGap  = 8;
+            var totalW  = (totalDots * dotSize) + ((totalDots - 1) * dotGap);
+            var startX  = (w - totalW) / 2;
 
             for (var i = 0; i < totalDots; i++) {
                 var x = startX + (i * (dotSize + dotGap));
