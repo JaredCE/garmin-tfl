@@ -145,18 +145,15 @@ module BusNearMe {
             isSelected as Boolean,
             isLast     as Boolean
         ) as Void {
-            var cx = w / 2;
-
-            // At y~52-190, safe usable width is roughly 220px, so margins of ~20px each side
+            var cx      = w / 2;
             var marginX = 22;
 
-            // Highlight selected row
             if (isSelected) {
                 dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_BLUE);
                 dc.fillRectangle(marginX, y - 2, w - (marginX * 2), 42);
             }
 
-            // Truncate stop name to fit safe width (~20 chars at FONT_SMALL)
+            // Stop name — truncate to fit
             var name = stop.name;
             if (name.length() > 20) {
                 name = name.substring(0, 18) + "..";
@@ -170,16 +167,20 @@ module BusNearMe {
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
-            // Distance sub-label
+            // Sub-label: "Stop C · 67m" or just "67m" if no indicator
+            var subLabel = stop.distance + "m";
+            if (stop.indicator.length() > 0) {
+                subLabel = stop.indicator + " · " + stop.distance + "m";
+            }
+
             dc.setColor(isSelected ? Graphics.COLOR_WHITE : Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 cx, y + 26,
                 Graphics.FONT_XTINY,
-                stop.distance + "m",
+                subLabel,
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
             );
 
-            // Divider
             if (!isLast && !isSelected) {
                 dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
                 dc.drawLine(50, y + 42, w - 50, y + 42);
