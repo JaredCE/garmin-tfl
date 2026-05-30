@@ -33,7 +33,13 @@ module BusNearMe {
                     drawStops(dc, controller.stops as Array, controller.scrollIndex);
                     break;
                 case AppState.ARRIVALS:
-                    drawArrivals(dc, controller.arrivals as Array, controller.selectedStop as Stop, controller.scrollIndex);
+                    drawArrivals(
+                        dc,
+                        controller.arrivals as Array,
+                        controller.arrivalsRaw as Array,
+                        controller.selectedStop as Stop,
+                        controller.scrollIndex
+                    );
                     break;
                 case AppState.ERROR:
                     drawError(dc, controller.errorMsg as String);
@@ -192,6 +198,7 @@ module BusNearMe {
         function drawArrivals(
             dc          as Graphics.Dc,
             arrivals    as Array,
+            arrivalsRaw as Array,
             stop        as Stop,
             scrollIndex as Number
         ) as Void {
@@ -236,7 +243,7 @@ module BusNearMe {
                 var y       = listTop + (i * rowHeight);
                 var isLast  = (i + clampedIndex) == arrivals.size() - 1;
 
-                drawArrivalRow(dc, arrival, arrivals, y, w, isLast);
+                drawArrivalRow(dc, arrival, arrivalsRaw, y, w, isLast);
             }
 
             if (arrivals.size() > visibleRows) {
@@ -254,12 +261,12 @@ module BusNearMe {
         }
 
         function drawArrivalRow(
-            dc       as Graphics.Dc,
-            arrival  as Arrival,
-            arrivals as Array,
-            y        as Number,
-            w        as Number,
-            isLast   as Boolean
+            dc          as Graphics.Dc,
+            arrival     as Arrival,
+            arrivalsRaw as Array,
+            y           as Number,
+            w           as Number,
+            isLast      as Boolean
         ) as Void {
             var cx = w / 2;
 
@@ -288,7 +295,7 @@ module BusNearMe {
             );
 
             // ETA row — green, centred under the line above
-            var etaLabel = buildEtaLabel(arrivals, arrival);
+            var etaLabel = buildEtaLabel(arrivalsRaw, arrival);
             dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
             dc.drawText(
                 cx, y + 28,
