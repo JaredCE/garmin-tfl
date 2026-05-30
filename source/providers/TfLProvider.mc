@@ -213,9 +213,7 @@ module BusNearMe {
 
         // --- Private parsers ---
 
-        function parseStops(data as Dictionary) as Array<Stop> or Null {
-            // TfL response shape:
-            // { "stopPoints": [ { "id", "commonName", "lat", "lon", "distance" }, ... ] }
+        function parseStops(data as Dictionary) as Array or Null {
             if (!data.hasKey("stopPoints")) {
                 return null;
             }
@@ -226,15 +224,21 @@ module BusNearMe {
             for (var i = 0; i < rawStops.size() && i < 10; i++) {
                 var raw = rawStops[i] as Dictionary;
 
-                // Guard every field — Garmin memory issues from bad parses are hard to debug
                 if (!raw.hasKey("id") || !raw.hasKey("commonName") ||
                     !raw.hasKey("lat") || !raw.hasKey("lon")) {
                     continue;
                 }
 
+                // indicator may be absent for some stop types
+                var indicator = "";
+                if (raw.hasKey("indicator") && raw["indicator"] != null) {
+                    indicator = raw["indicator"].toString();
+                }
+
                 var stop = new Stop(
                     raw["id"].toString(),
                     raw["commonName"].toString(),
+                    indicator,
                     (raw["lat"] as Float).toFloat(),
                     (raw["lon"] as Float).toFloat(),
                     raw.hasKey("distance") ? (raw["distance"] as Number).toNumber() : 0
